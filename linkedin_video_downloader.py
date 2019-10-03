@@ -52,7 +52,7 @@ def clean_dir_name(dir_name):
 def convert_file_size(size_in_bytes):
     if size_in_bytes == 0:
         return "OB"
-    size_map = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+    size_map = ("B", "KB", "MB", "GB")
     value = int(math.floor(math.log(size_in_bytes, 1024)))
     power = math.pow(1024, value)
     size = round(size_in_bytes / power, 2)
@@ -244,7 +244,6 @@ async def process():
         logging.info("*" * len(PASSWORD))
         await login(USERNAME, PASSWORD)
         logging.info("[*] -------------Done-------------")
-
         logging.info("[*] -------------Fetching Course-------------")
         await fetch_courses()
         logging.info("[*] -------------Done-------------")
