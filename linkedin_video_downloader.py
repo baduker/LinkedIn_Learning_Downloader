@@ -152,7 +152,7 @@ async def fetch_course(course_slug):
         logging.info(f'[*] Access to {course.name} '
                      f'is {"GRANTED" if course.unlocked else "DENIED"}')
         await fetch_chapters(course)
-        if "exercise" in course:
+        if course.exercise is not None:
             logging.info(f'[*] Found exercise files: {course.exercise}')
             await fetch_exercises(course)
         logging.info(f'[*] Finished  fetching course "{course.name}"')
