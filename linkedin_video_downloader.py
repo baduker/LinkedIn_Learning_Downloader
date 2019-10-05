@@ -153,9 +153,12 @@ async def fetch_course(course_slug):
                      f'is {"GRANTED" if course.unlocked else "DENIED"}')
         await fetch_chapters(course)
         if course.exercise is not None:
-            logging.info(f'[*] Found exercise files: {course.exercise}')
-            await fetch_exercises(course)
-        logging.info(f'[*] Finished  fetching course "{course.name}"')
+            try:
+                logging.info(f'[*] Found exercise files: {course.exercise}')
+                await fetch_exercises(course)
+            except KeyError:
+                pass
+        logging.info(f'[*] Finished fetching course "{course.name}"')
 
 
 async def fetch_chapters(course: Course):
@@ -213,8 +216,8 @@ async def fetch_video(course: Course, chapter: Chapter, video: Video):
 
         await write_subtitles(subtitles, subtitle_file_path, duration_in_ms)
 
-    logging.info(f"[~] Done fetching course '{course.name}'"
-                 f" Chapter no. {chapter.index} Video no. {video.index}")
+    logging.info(
+        f"[~] Fetched: Chapter no. {chapter.index} Video no. {video.index}")
 
 
 async def write_subtitles(subs, output_path, video_duration):
@@ -239,39 +242,38 @@ async def fetch_exercises(course: Course):
     if exercise_file_exists:
         return
 
-    logging.info(f"[~] Fetching exercise files '{course.exercise} "
+    logging.info(f"[~] Fetching exercise files: '{course.exercise}' "
                  f"| Size: {convert_file_size(course.exercise_size)}")
     await download_file(course.exercise_url, course_folder_path)
-    logging.info(f"[~] Done fetching exercise files for '{course.exercise}' "
-                 f"| Size: {convert_file_size(course.exercise_size)}")
-
+    logging.info(f"[~] Done fetching exercise files for '{course.name}'")
 
 async def download_file(url, output):
     async with aiohttp.ClientSession(
             headers=HEADERS, cookie_jar=COOKIE_JAR) as session:
-        async with session.get(url, proxy=PROXY, headers=HEADERS, ssl=False) as r:
+        async with session.get(
+            url, proxy=PROXY, headers=HEADERS, ssl=False) as request:
             try:
-                with open(output, 'wb') as f:
+                with open(output, 'wb') as file:
                     while True:
-                        chunk = await r.content.read(1024)
+                        chunk = await request.content.read(1024)
                         if not chunk:
                             break
-                        f.write(chunk)
-            except Exception as e:
-                logging.exception(f"[!] Error while downloading: '{e}'")
+                        file.write(chunk)
+            except Exception as error:
+                logging.exception(f"[!] Error while downloading: '{error}'")
                 if os.path.exists(output):
                     os.remove(output)
 
 
 async def process():
-    start = time.time()
     try:
-        logging.info("[*] -------------Login-------------")
+        start = time.time()
+        logging.info("[*] -------------Login------------")
         logging.info(USERNAME.split("@")[0])
         logging.info("*" * len(PASSWORD))
         await login(USERNAME, PASSWORD)
         logging.info("[*] -------------Done-------------")
-        logging.info("[*] -------------Fetching Course-------------")
+        logging.info("[*] --------Fetching Cours--------")
         await fetch_courses()
         logging.info("[*] -------------Done-------------")
         stop = time.time()
