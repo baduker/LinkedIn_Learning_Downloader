@@ -3,22 +3,25 @@ import re
 import math
 import time
 import logging
-import asyncio
-import aiohttp
-import lxml.html
-import aiohttp.cookiejar
 from itertools import chain, filterfalse, starmap
 from collections import namedtuple
 from urllib.parse import urljoin
 from config import USERNAME, PASSWORD, COURSES, PROXY, BASE_DOWNLOAD_PATH
 
 
-logging.basicConfig(level=logging.DEBUG,
-    format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
+import asyncio
+import aiohttp
+import lxml.html
+import aiohttp.cookiejar
+
+
+logging.basicConfig(
+    level=logging.DEBUG, format='%(asctime)-12s %(levelname)-8s %(message)s')
 
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.181 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
+     AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.181 Safari/537.36",
     "Accept": "*/*",
 }
 URL = "https://www.linkedin.com/login?trk=guest_homepage-basic_nav-header-signin"
@@ -74,14 +77,21 @@ def build_course(course_element: dict):
                 index=idx)
         for idx, course in enumerate(course_element['chapters'], start=1)
     ]
-    course = Course(name=course_element['title'],
-                    slug=course_element['slug'],
-                    description=course_element['description'],
-                    unlocked=course_element['fullCourseUnlocked'],
-                    chapters=chapters,
-                    exercise=course_element.get('exerciseFiles')[0]['name'],
-                    exercise_size=course_element.get('exerciseFiles')[0]['sizeInBytes'],
-                    exercise_url=course_element.get('exerciseFiles')[0]['url'])
+    if len(course_element['exerciseFiles']) > 0:
+        course = Course(name=course_element['title'],
+                        slug=course_element['slug'],
+                        description=course_element['description'],
+                        unlocked=course_element['fullCourseUnlocked'],
+                        chapters=chapters,
+                        exercise=course_element['exerciseFiles'][0]['name'],
+                        exercise_size=course_element['exerciseFiles'][0]['sizeInBytes'],
+                        exercise_url=course_element['exerciseFiles'][0]['url'])
+    else:
+        course = Course(name=course_element['title'],
+                        slug=course_element['slug'],
+                        description=course_element['description'],
+                        unlocked=course_element['fullCourseUnlocked'],
+                        chapters=chapters)
     return course
 
 
@@ -109,30 +119,40 @@ async def login(username, password):
         }
         logging.info("[*] Login step 1 - Done")
         logging.info("[*] Login step 2 - Logging In...")
-        await session.post(urljoin(URL, 'uas/login-submit'), proxy=PROXY, data=data, ssl=False)
+        await session.post(
+            urljoin(URL, 'uas/login-submit'), proxy=PROXY,
+            data=data, ssl=False)
 
-        if not next((x.value for x in session.cookie_jar if x.key.lower() == 'li_at'), False):
+        if not next((x.value for x in session.cookie_jar
+                    if x.key.lower() == 'li_at'), False):
             raise RuntimeError("[!] Could not login. Please check your credentials")
 
-        HEADERS['Csrf-Token'] = next(x.value for x in session.cookie_jar if x.key.lower() == 'jsessionid')
+        HEADERS['Csrf-Token'] = next(x.value for x in session.cookie_jar
+                                     if x.key.lower() == 'jsessionid')
         logging.info("[*] Login step 2 - Done")
 
 
 async def fetch_courses():
-    return await asyncio.gather(*map(fetch_course, COURSES))
+    for course in COURSES:
+        if os.path.exists(clean_dir_name(course)):
+            logging.info(f"The {course} has been already downloaded")
+            return
+        else:
+            return await asyncio.gather(*map(fetch_course, COURSES))
 
 
 async def fetch_course(course_slug):
     url = f"https://www.linkedin.com/learning-api/detailedCourses" \
-                 f"??fields=videos&addParagraphsToTranscript=true&courseSlug={course_slug}&q=slugs"
+        f"??fields=videos&addParagraphsToTranscript=true&courseSlug={course_slug}&q=slugs"
 
     async with aiohttp.ClientSession(headers=HEADERS, cookie_jar=COOKIE_JAR) as session:
         resp = await session.get(url, proxy=PROXY, headers=HEADERS, ssl=False)
         data = await resp.json()
         course = build_course(data['elements'][0])
-        logging.info(f'[*] Access to {course.name} is {"GRANTED" if course.unlocked else "DENIED"}')
+        logging.info(f'[*] Access to {course.name} '
+                     f'is {"GRANTED" if course.unlocked else "DENIED"}')
         await fetch_chapters(course)
-        if course.exercise is not None:
+        if "exercise" in course:
             logging.info(f'[*] Found exercise files: {course.exercise}')
             await fetch_exercises(course)
         logging.info(f'[*] Finished  fetching course "{course.name}"')
@@ -146,27 +166,28 @@ async def fetch_chapters(course: Course):
     for d in missing_directories:
         os.makedirs(d)
 
-    await asyncio.gather(*chain.from_iterable(fetch_chapter(course, chapter) for chapter in course.chapters))
+    await asyncio.gather(*chain.from_iterable(
+            fetch_chapter(course, chapter) for chapter in course.chapters))
 
 
 def fetch_chapter(course: Course, chapter: Chapter):
-    return (
-        fetch_video(course, chapter, video)
-        for video in chapter.videos
-    )
+    return (fetch_video(course, chapter, video) for video in chapter.videos)
 
 
 async def fetch_video(course: Course, chapter: Chapter, video: Video):
     subtitles_filename = os.path.splitext(video.filename)[0] + FILE_TYPE_SUBTITLE
     video_file_path = os.path.join(chapter_dir(course, chapter), video.filename)
-    subtitle_file_path = os.path.join(chapter_dir(course, chapter), subtitles_filename)
+    subtitle_file_path = os.path.join(
+        chapter_dir(course, chapter), subtitles_filename)
     video_exists = os.path.exists(video_file_path)
     subtitle_exists = os.path.exists(subtitle_file_path)
     if video_exists and subtitle_exists:
         return
 
-    logging.info(f"[~] Fetching course '{course.name}' Chapter no. {chapter.index} Video no. {video.index}")
-    async with aiohttp.ClientSession(headers=HEADERS, cookie_jar=COOKIE_JAR) as session:
+    logging.info(f"[~] Fetching course '{course.name}'"
+                 f" Chapter no. {chapter.index} Video no. {video.index}")
+    async with aiohttp.ClientSession(
+            headers=HEADERS, cookie_jar=COOKIE_JAR) as session:
         video_url = f'https://www.linkedin.com/learning-api/detailedCourses?addParagraphsToTranscript=false&courseSlug={course.slug}&' \
                     f'q=slugs&resolution=_720&videoSlug={video.slug}'
         data = None
@@ -185,21 +206,22 @@ async def fetch_video(course: Course, chapter: Chapter, video: Video):
             subtitles = data['elements'][0]['selectedVideo']['transcript']['lines']
         except KeyError as e:
             subtitles = ""
-
-        duration_in_ms = int(data['elements'][0]['selectedVideo']['durationInSeconds']) * 1000
-
+        duration_in_ms = int(
+            data['elements'][0]['selectedVideo']['durationInSeconds']) * 1000
         if not video_exists:
             await download_file(video_url, video_file_path)
 
         await write_subtitles(subtitles, subtitle_file_path, duration_in_ms)
 
-    logging.info(f"[~] Done fetching course '{course.name}' Chapter no. {chapter.index} Video no. {video.index}")
+    logging.info(f"[~] Done fetching course '{course.name}'"
+                 f" Chapter no. {chapter.index} Video no. {video.index}")
 
 
 async def write_subtitles(subs, output_path, video_duration):
     def subs_to_lines(idx, sub):
         starts_at = sub['transcriptStartAt']
-        ends_at = subs[idx]['transcriptStartAt'] if idx < len(subs) else video_duration
+        ends_at = subs[idx]['transcriptStartAt'] \
+            if idx < len(subs) else video_duration
         caption = sub['caption']
         return f"{idx}\n" \
                f"{sub_format_time(starts_at)} --> {sub_format_time(ends_at)}\n" \
@@ -211,17 +233,22 @@ async def write_subtitles(subs, output_path, video_duration):
 
 
 async def fetch_exercises(course: Course):
-    if course.exercise is not None:
-        course_folder_path = os.path.join(BASE_DOWNLOAD_PATH, clean_dir_name(course.name), course.exercise)
-        logging.info(f"[~] Fetching exercise files '{course.exercise} | Size: {convert_file_size(course.exercise_size)}")
-        await download_file(course.exercise_url, course_folder_path)
-        logging.info(f"[~] Done fetching exercise files for '{course.exercise}' | Size: {convert_file_size(course.exercise_size)}")
-    else:
-        logging.info(f"[*] There's no exercise files for '{course.name}")
+    course_folder_path = os.path.join(
+        BASE_DOWNLOAD_PATH, clean_dir_name(course.name), course.exercise)
+    exercise_file_exists = os.path.exists(course_folder_path)
+    if exercise_file_exists:
+        return
+
+    logging.info(f"[~] Fetching exercise files '{course.exercise} "
+                 f"| Size: {convert_file_size(course.exercise_size)}")
+    await download_file(course.exercise_url, course_folder_path)
+    logging.info(f"[~] Done fetching exercise files for '{course.exercise}' "
+                 f"| Size: {convert_file_size(course.exercise_size)}")
 
 
 async def download_file(url, output):
-    async with aiohttp.ClientSession(headers=HEADERS, cookie_jar=COOKIE_JAR) as session:
+    async with aiohttp.ClientSession(
+            headers=HEADERS, cookie_jar=COOKIE_JAR) as session:
         async with session.get(url, proxy=PROXY, headers=HEADERS, ssl=False) as r:
             try:
                 with open(output, 'wb') as f:
@@ -249,10 +276,10 @@ async def process():
         logging.info("[*] -------------Done-------------")
         stop = time.time()
         logging.info("[*] Time taken: {:.2f} seconds.".format(stop - start))
-    except aiohttp.client_exceptions.ClientProxyConnectionError as e:
-        logging.error(f"Proxy Error: {e}")
-    except aiohttp.client_exceptions.ClientConnectionError as e:
-        logging.error(f"Connection Error: {e}")
+    except aiohttp.ClientProxyConnectionError as error:
+        logging.error(f"Proxy Error: {error}")
+    except aiohttp.ClientConnectionError as error:
+        logging.error(f"Connection Error: {error}")
 
 
 if __name__ == "__main__":
