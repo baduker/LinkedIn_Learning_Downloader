@@ -30,8 +30,8 @@ FILE_TYPE_SUBTITLE = ".srt"
 COOKIE_JAR = aiohttp.cookiejar.CookieJar()
 Course = namedtuple(
     "Course", [
-        "name", "slug", "description", "unlocked",
-        "chapters", "exercise", "exercise_url", "exercise_size"
+        "name", "slug", "description", "chapters", 
+        "exercise", "exercise_url", "exercise_size"
         ])
 Chapter = namedtuple("Chapter", ["name", "videos", "index"])
 Video = namedtuple("Video", ["name", "slug", "index", "filename"])
@@ -81,17 +81,10 @@ def build_course(course_element: dict):
         course = Course(name=course_element['title'],
                         slug=course_element['slug'],
                         description=course_element['description'],
-                        unlocked=course_element['fullCourseUnlocked'],
                         chapters=chapters,
                         exercise=course_element['exerciseFiles'][0]['name'],
                         exercise_size=course_element['exerciseFiles'][0]['sizeInBytes'],
                         exercise_url=course_element['exerciseFiles'][0]['url'])
-    else:
-        course = Course(name=course_element['title'],
-                        slug=course_element['slug'],
-                        description=course_element['description'],
-                        unlocked=course_element['fullCourseUnlocked'],
-                        chapters=chapters)
     return course
 
 
@@ -145,19 +138,16 @@ async def fetch_course(course_slug):
     url = f"https://www.linkedin.com/learning-api/detailedCourses" \
         f"??fields=videos&addParagraphsToTranscript=true&courseSlug={course_slug}&q=slugs"
 
-    async with aiohttp.ClientSession(headers=HEADERS, cookie_jar=COOKIE_JAR) as session:
+    async with aiohttp.ClientSession(
+        headers=HEADERS, cookie_jar=COOKIE_JAR) as session:
+    
         resp = await session.get(url, proxy=PROXY, headers=HEADERS, ssl=False)
         data = await resp.json()
         course = build_course(data['elements'][0])
-        logging.info(f'[*] Access to {course.name} '
-                     f'is {"GRANTED" if course.unlocked else "DENIED"}')
         await fetch_chapters(course)
         if course.exercise is not None:
-            try:
-                logging.info(f'[*] Found exercise files: {course.exercise}')
-                await fetch_exercises(course)
-            except KeyError:
-                pass
+            logging.info(f'[*] Found exercise files: {course.exercise}')
+            await fetch_exercises(course)
         logging.info(f'[*] Finished fetching course "{course.name}"')
 
 
@@ -191,7 +181,9 @@ async def fetch_video(course: Course, chapter: Chapter, video: Video):
                  f" Chapter no. {chapter.index} Video no. {video.index}")
     async with aiohttp.ClientSession(
             headers=HEADERS, cookie_jar=COOKIE_JAR) as session:
-        video_url = f'https://www.linkedin.com/learning-api/detailedCourses?addParagraphsToTranscript=false&courseSlug={course.slug}&' \
+        video_url = f'https://www.linkedin.com/learning-api/' \
+                    f'detailedCourses?addParagraphsToTranscript=' \
+                    f'false&courseSlug={course.slug}&' \
                     f'q=slugs&resolution=_720&videoSlug={video.slug}'
         data = None
         tries = 3
@@ -201,7 +193,7 @@ async def fetch_video(course: Course, chapter: Chapter, video: Video):
                 data = await resp.json()
                 resp.raise_for_status()
                 break
-            except aiohttp.client_exceptions.ClientResponseError:
+            except aiohttp.ClientResponseError:
                 pass
 
         video_url = data['elements'][0]['selectedVideo']['url']['progressiveUrl']
@@ -247,11 +239,12 @@ async def fetch_exercises(course: Course):
     await download_file(course.exercise_url, course_folder_path)
     logging.info(f"[~] Done fetching exercise files for '{course.name}'")
 
+
 async def download_file(url, output):
     async with aiohttp.ClientSession(
             headers=HEADERS, cookie_jar=COOKIE_JAR) as session:
         async with session.get(
-            url, proxy=PROXY, headers=HEADERS, ssl=False) as request:
+                url, proxy=PROXY, headers=HEADERS, ssl=False) as request:
             try:
                 with open(output, 'wb') as file:
                     while True:
