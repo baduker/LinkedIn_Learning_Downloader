@@ -20,8 +20,7 @@ logging.basicConfig(
 
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
-     AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.181 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.181 Safari/537.36",
     "Accept": "*/*",
 }
 URL = "https://www.linkedin.com/login?trk=guest_homepage-basic_nav-header-signin"
@@ -77,14 +76,14 @@ def build_course(course_element: dict):
                 index=idx)
         for idx, course in enumerate(course_element['chapters'], start=1)
     ]
-    if len(course_element['exerciseFiles']) > 0:
-        course = Course(name=course_element['title'],
-                        slug=course_element['slug'],
-                        description=course_element['description'],
-                        chapters=chapters,
-                        exercise=course_element['exerciseFiles'][0]['name'],
-                        exercise_size=course_element['exerciseFiles'][0]['sizeInBytes'],
-                        exercise_url=course_element['exerciseFiles'][0]['url'])
+    course = Course(name=course_element['title'],
+                    slug=course_element['slug'],
+                    description=course_element['description'],
+                    chapters=chapters,
+                    exercise=course_element['exerciseFiles'][0]['name'],
+                    exercise_size=course_element[
+                    'exerciseFiles'][0]['sizeInBytes'],
+                    exercise_url=course_element['exerciseFiles'][0]['url'])
     return course
 
 
