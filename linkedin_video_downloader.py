@@ -261,7 +261,7 @@ async def process():
     try:
         start = time.time()
         logging.info("[*] -------------Login------------")
-        logging.info(USERNAME.split("@")[0])
+        logging.info("*" * len(USERNAME))
         logging.info("*" * len(PASSWORD))
         await login(USERNAME, PASSWORD)
         logging.info("[*] -------------Done-------------")
